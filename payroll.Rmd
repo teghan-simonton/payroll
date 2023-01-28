@@ -1,0 +1,417 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+#Load in libraries
+library(tidyverse)
+library(janitor)
+library(lubridate)
+```
+
+```{r}
+#Import all files
+payroll_17 <- read_csv("data/checkbook-data-2023-01-02_2017.csv") %>% clean_names() %>% 
+  mutate(fiscal_year = 2017)
+payroll_18 <- read_csv("data/checkbook-data-2023-01-02_2018.csv") %>% clean_names() %>% 
+  mutate(fiscal_year = 2018)
+payroll_19 <- read_csv("data/checkbook-data-2023-01-02_2019.csv") %>% clean_names() %>% 
+  mutate(fiscal_year = 2019)
+payroll_20 <- read_csv("data/checkbook-data-2023-01-02_2020.csv") %>% clean_names() %>% 
+  mutate(fiscal_year = 2020)
+payroll_21 <- read_csv("data/checkbook-data-2023-01-02_2021.csv") %>% clean_names() %>% 
+  mutate(fiscal_year = 2021)
+payroll_22 <- read_csv("data/checkbook-data-2023-01-02_2022.csv") %>% clean_names() %>% 
+  mutate(fiscal_year = 2022)
+payroll_23 <- read_csv("data/checkbook-data-2023-01-02_2023.csv") %>% clean_names() %>% 
+  mutate(fiscal_year = 2023)
+
+#Check start and end dates -- verify exact fiscal year
+
+#Early October to the end of September -- consistent each year so we should be able to combine
+payroll_17 %>% 
+  count(check_date) %>% 
+  arrange(check_date) 
+
+payroll_18 %>% 
+  count(check_date) %>% 
+  arrange(check_date)
+
+payroll_19 %>% 
+  count(check_date) %>% 
+  arrange(check_date)
+
+payroll_20 %>% 
+  count(check_date) %>% 
+  arrange(check_date)
+
+payroll_21 %>% 
+  count(check_date) %>% 
+  arrange(check_date)
+
+payroll_22 %>% 
+  count(check_date) %>% 
+  arrange(check_date)
+
+payroll_23 %>% 
+  count(check_date) %>% 
+  arrange(check_date)
+
+master_payroll <- bind_rows(payroll_17, payroll_18, payroll_19, payroll_20, payroll_21, payroll_22, payroll_23)
+
+master_payroll %>% 
+  count(check_date) %>% 
+  arrange(check_date)
+
+#Make full name column
+master_payroll <- master_payroll %>% 
+  mutate(full_name = paste0(first_name, " ", last_name))
+
+#After confirming everything works -- clean up a little
+rm(payroll_17, payroll_18, payroll_19, payroll_20, payroll_21, payroll_22, payroll_23)
+```
+
+```{r}
+#Integrity checks
+
+#last names
+master_payroll %>% count(last_name)
+
+#first names - 1,383 first names
+master_payroll %>% count(first_name)
+
+#full names - this might make any spelling discrepancies more obvious - 3,740 rows
+##Making it an object so I can view more than 1000
+names <- master_payroll %>% count(last_name, first_name)
+
+master_payroll %>% count(department)
+#A few discrepancies -- "director of utilities" vs "director utilities" and similar mistakes
+##Need to find some way to fix
+
+master_payroll %>% count(job_title)
+
+#Some of the departments look like job titles...Is there redundancy?
+##Cursory glance makes it hard to tell. I wouldn't eliminate or combine any of the departments/job titles without an interview to clarify first.
+master_payroll %>% count(department, job_title)
+
+#53 options for subcategory -- this appears to be the item that payment was for
+master_payroll %>% count(subcategory)
+#Noticed there is an "Overtime" subcategory, but the payment is sometimes marked in other_pay rather tan in overtime_pay. Is there a way to clean this?
+#Might also be interesting to look at meal allowances, mileage reimbursement, travel
+
+#total_pay 
+master_payroll %>% count(total_pay)
+#There are quite a few negative amounts in here. Could that mean employees over-expended? Take a closer look:
+master_payroll %>% filter(total_pay < 0) #All sorts of departments and job titles, but the subcategory is almost always Miscellaneous. This might be something we have to follow up with in an interview.
+
+master_payroll %>% count(base_pay)
+#Same anomaly as above
+master_payroll %>% filter(base_pay < 0) #Very confusing. Not clear why so many are negative.
+
+master_payroll %>% count(overtime_pay)
+master_payroll %>% filter(overtime_pay < 0)
+#It's clear that base + overtime + other pay = total_pay...Just strange that people would have negative base pay or negative overtime, unless they over-expended. This would need checking with the city.
+
+master_payroll %>% count(other_pay)
+
+master_payroll %>% count(employer_paid_benefits)
+
+master_payroll %>% count(check_number) 
+#Same checks repeat - why?
+master_payroll %>% filter(check_number == 333849)
+#Seems like this database shows each individual item that goes into an employee's paycheck.
+
+master_payroll %>% count(check_date)
+#Checks for the most part seem to follow a bi-weekly schedule
+#Data from October 2019 to September 2022
+
+```
+
+
+```{r}
+#Fix department field using mutate and replace
+##I'm sure there is probably a better way to do this, and it can probably be combined even further; but I only addressed department names that were clearly and obviously referring to the same thing.
+master_payroll <- master_payroll %>% 
+  mutate(department = replace(department, department == "ASST DIRECTOR OF UTILITIES", "ASST DIRECTOR UTILITIES"),
+         department = replace(department, department == "ASST POWER PRODUCTION SUPT", "ASST POWER PRODUCTION SUPRNTNT"),
+         department = replace(department, department == "CITY CLERK DEPT DIRECTOR", "CITY CLERK DIR"),
+         department = replace(department, department == "CITY MANAGER DEPT DIRECTOR", "CITY MANAGER DIRECTOR"),
+         department = replace(department, department == "ECONOMIC DEVELOPMENT DEPT DIR", "ECONOMIC DEVELOPMENT DIRECTOR"),
+         department = replace(department, department == "FINANCE ACCTING AR SUPERVISOR", "FINANCE ACCTING AP SUPERVISOR"),
+         department = replace(department, department == "FINANCE DEPT DIRECTOR", "FINANCE DIRECTOR"),
+         department = replace(department, department == "HD DEPT DIRECTOR", "HD DIRECTOR"),
+         department = replace(department, department == "IT DEPT DIRECTOR", "IT DIRECTOR"),
+         department = replace(department, department == "PLANNING DEPT DIRECTOR", "PLANNING DIRECTOR"),
+         department = replace(department, department == "POWER PRODUCTION SUPT", "POWER PRODUCTION SUPERINTNDNT"),
+         department = replace(department, department == "PW DEPT DIRECTOR", "PW DIRECTOR"),
+         department = replace(department, department == "RAILROAD OPERATION MANAGER", "RAILROAD OPERATIONS MANAGER"),
+         department = replace(department, department == "REC SERV COMMUNITY PROG SUPT", "REC SERV COMMUNITY PROGS SUPT"),
+         department = replace(department, department == "SUBSTATION REPAIR SUPERINTNDT", "SUBSTATION REPAIR SUPT"),
+         department = replace(department, department == "UTILITIES DEPT DIRECTOR", "UTILITIES DIRECTOR"),
+         department = replace(department, department == "ECON DEV DIRECTOR", "ECONOMIC DEVELOPMENT DIRECTOR"))
+
+#Count again to see the difference:
+master_payroll %>% count(department)
+```
+
+```{r}
+#Is there a way to fix the overtime pay problem?
+
+#View overtime payments where the subcategory is identified 
+master_payroll %>% 
+  filter(subcategory == "OVERTIME")
+
+#View payments in the overtime_pay field -- are they all labeled correctly in the subcategory field?
+master_payroll %>% 
+  filter(overtime_pay > 0)
+#A few are labeled as Permanent Positions in the subcategory field; but given the low amounts it's likely a mistake.
+
+#Most payments in the overtime_pay field are labeled with OVERTIME as the subcategory. To view all, it seems like I can just filter with both to be sure. Example:
+master_payroll %>% 
+  filter(subcategory == "OVERTIME" | overtime_pay > 0)
+#72,647 records
+```
+#Questions for Analysis
+1. Who is the highest paid employee each year? 
+2. Who made the most in overtime each year? Department and individual
+3. How spent the most in travel, mileage and meals?
+4. What department spends the most in payroll?
+
+```{r}
+#Who is the highest paid employee and what did they make in a year?
+
+#Create list of highest paid employees
+master_payroll %>% 
+  #filtering to show only full years
+  filter(fiscal_year != 2023) %>% 
+  group_by(full_name, fiscal_year) %>% 
+  summarise(total = sum(total_pay)) %>% 
+  arrange(desc(total))
+
+#Alternatively -- here's a look at the same list but with the spread function to view years separately. Currently arranged by the highest pay in 2022.
+master_payroll %>% 
+  #filtering 2020 and 2021 because those are the full years we have
+  filter(fiscal_year != 2023) %>% 
+  group_by(full_name, fiscal_year) %>% 
+  summarise(total = sum(total_pay)) %>% 
+  spread(fiscal_year, total) %>% 
+  arrange(desc(`2022`))
+
+```
+
+
+```{r}
+#Take a closer look at Darrin Arrends -- total pay just about tripled in one year
+master_payroll %>% 
+  filter(fiscal_year == 2017) %>% 
+  filter(full_name == "DARRIN ARENDS") %>% 
+  arrange(desc(total_pay))
+
+master_payroll %>% 
+  filter(fiscal_year == 2021) %>% 
+  filter(full_name == "DARRIN ARENDS") %>% 
+  arrange(desc(check_date))
+
+master_payroll %>% 
+  filter(fiscal_year == 2022) %>% 
+  filter(full_name == "DARRIN ARENDS") %>% 
+  arrange(desc(total_pay))
+
+#Deferred retirement payments and DROP liability (another retirement payment). Figure out how/why this is a thing
+
+#The top 5 earners all had massive jumps in 2022. Are they all retirees with this situation?
+
+master_payroll %>% 
+  filter(fiscal_year == 2022) %>% 
+  filter(full_name == "GEOFFREY JONES") %>% 
+  arrange(desc(total_pay))
+
+```
+
+```{r}
+#What city department spends the most in payroll in a year?
+master_payroll %>% 
+  #filtering 2020 and 2021 because those are the full years we have
+  filter(fiscal_year != 2023) %>% 
+  group_by(department, fiscal_year) %>% 
+  summarise(total = sum(total_pay)) %>% 
+  arrange(desc(total))
+
+#Police have the most payroll expenses -- followed by both fire and police pensions.
+```
+
+
+```{r}
+#What city department spends the most in overtime in a year?
+
+#Have to do this in multiple steps because some overtimes are listed as "other"
+OT_depts1 <- master_payroll %>% 
+  filter(subcategory == "OVERTIME" | overtime_pay > 0) %>% 
+  group_by(department, fiscal_year) %>% 
+  summarise(total_ot = sum(overtime_pay)) %>% 
+  arrange(desc(total_ot))
+
+#This shows the police department as the greatest dispenser of overtime pay all. There was also a massive jump in the amount of overtime pay from fiscal years 2021 to 2022, but this could be due to the differences in how OT pay is recorded.
+
+#Interesting that Airport safety overtime was among the highest in 2022, with another huge jump from fiscal year 2021.
+
+#Look at just Police OT in 2020 to investigate further:
+master_payroll %>% 
+  filter(subcategory == "OVERTIME"| overtime_pay > 0) %>% 
+  filter(grepl("POLICE", department) & fiscal_year == 2020)
+#Using grepl to get all asst. police chief category as well
+
+#There are at least a couple instances where the overtime sum is not in overtime, but instead in "other_pay." To address that:
+OT_depts2 <- master_payroll %>% 
+  #look at the records labeled "OVERTIME" but only have money listed in "other_pay"
+  filter(subcategory == "OVERTIME" & overtime_pay == 0) %>% 
+  group_by(department, fiscal_year) %>% 
+  summarise(total_ot = sum(other_pay)) %>% 
+  arrange(desc(total_ot))
+  
+#This shows several fire divisions as having the highest overtime expenses.
+
+#To get the true totals, combine the above views and do the calculation over again
+OT_depts_final <- bind_rows(OT_depts1, OT_depts2) %>% 
+  group_by(department, fiscal_year) %>% 
+  summarise(total_ot = sum(total_ot)) %>% 
+  arrange(desc(total_ot))
+#This seems to have successfully combined the total overtime expenses for each department, including both instances where it is marks in "overtime_pay" and in "other_pay." It does not, however, change the bizzare jump in Police OT from 2021 to 2022 -- that may need a phone call to the department, or could be a potential story.
+
+#The police department was Columbia's greatest dispenser in overtime pay in 2022 -- and has been one of the biggest spenders in this category for several of the past few years. This is not even including the "ASST POLICE CHIEF category, which would make the total rise even higher.
+
+#cleaning up
+rm(OT_depts1, OT_depts2)
+```
+
+
+```{r}
+#Which employee in the police department has made the most from overtime pay?
+##Similar to above, doing this in multiple steps
+
+#First sum OT when it's labeled in the overtime_pay field
+PD_OT1 <- master_payroll %>% 
+  filter(subcategory == "OVERTIME"| overtime_pay > 0) %>%
+  filter(grepl("POLICE", department)) %>% 
+  group_by(full_name, job_title, fiscal_year) %>% 
+  summarise(total_OT = sum(overtime_pay)) %>% 
+  arrange(desc(total_OT))
+
+#Then sum it when it's labeled in the other_pay field
+PD_OT2 <- master_payroll %>% 
+  filter(subcategory == "OVERTIME" & overtime_pay == 0) %>%
+  filter(grepl("POLICE", department)) %>% 
+  group_by(full_name, job_title, fiscal_year) %>% 
+  summarise(total_OT = sum(other_pay)) %>% 
+  arrange(desc(total_OT))
+
+#Bind the tables and figure out who really made the most overtime
+PD_OT_employees <- bind_rows(PD_OT1, PD_OT2) %>% 
+  group_by(full_name, job_title, fiscal_year) %>% 
+  summarise(total_OT = sum(total_OT)) %>% 
+  spread(fiscal_year, total_OT) %>% 
+  arrange(desc(`2022`))
+  
+#A LOT of people's overtime went up astronomically in the last year. What is going on in the department?
+
+#clean up
+rm(PD_OT1, PD_OT2)
+
+#Look at top earner
+master_payroll %>% 
+  filter(full_name == "RICKY MABE")
+
+#The top overtime-earner in the Police Department is a sergeant named Ricky Mabe, who took home $14,273 in overtime in FY 2022.
+
+#How much overtime did he make each year?
+master_payroll %>% 
+  filter(full_name == "RICKY MABE") %>% 
+  filter(subcategory == "OVERTIME"| overtime_pay > 0) %>%
+  group_by(fiscal_year) %>% 
+  summarise(ot_pay = sum(overtime_pay))
+
+```
+
+```{r}
+#Take a closer look at our top OT earner. What's his base pay?
+master_payroll %>% 
+  filter(full_name == "RICKY MABE") %>% 
+  filter(base_pay > 0) %>% 
+  group_by(fiscal_year) %>% 
+  summarise(base = sum(base_pay))
+
+#He seems to have gotten a moderate raise every year.
+
+#Figure out base pay per year for everyone in the payroll system.  Then just check out police. What was the median base pay in the PD in 2022?
+pd_base_pay <- master_payroll %>% 
+  group_by(full_name, department, job_title, fiscal_year) %>% 
+  summarise(base = sum(base_pay)) %>% 
+  filter(grepl("POLICE", department)) %>% 
+  spread(fiscal_year, base) 
+
+mean(pd_base_pay$`2022`, na.rm = TRUE)
+#The median base pay was $10,177.49 last year?
+#mean is $21,146.50...there must be a lot given in other categories
+
+#Save a version for all departments
+base_pay <- master_payroll %>% 
+  group_by(full_name, department, job_title, fiscal_year) %>% 
+  summarise(base = sum(base_pay)) %>% 
+  spread(fiscal_year, base) 
+
+```
+
+```{r}
+#How much of the highest-paid department's payroll expenses comes from overtime pay?
+
+#Calculate total PD payroll expenses each year
+total_PD_pay <- master_payroll %>% 
+  filter(grepl("POLICE", department)) %>% 
+  group_by(fiscal_year) %>% 
+  summarise(total_pay = sum(total_pay))
+
+##Separate PD from other overtime calculations
+PD_OT_total <- OT_depts_final %>% 
+  filter(grepl("POLICE", department))
+
+#Compare PD total expenses to overtime expenses
+ot_pct <- full_join(total_PD_pay, PD_OT_total, by = "fiscal_year") 
+
+ot_pct <- ot_pct %>% 
+  group_by(fiscal_year, total_pay) %>% 
+  summarise(total_ot = sum(total_ot)) %>% 
+  mutate(ot_pct_of_total = (total_ot/total_pay)*100)
+
+#overtime makes up between 1.5% and 1.7% of the total payroll budget.
+  
+```
+
+```{r}
+#Do officers do more overtime the years before they retire?
+
+#there are 213 names on this list
+police_retirees <- master_payroll %>% 
+  filter(grepl("POLICE", department)) %>% 
+  filter(grepl("RETIREE", job_title)) %>% 
+  count(full_name)
+
+#How many retirees collected ANY overtime in the years before their retirement?
+PD_OT_employees %>% 
+  semi_join(police_retirees, by = "full_name")
+#43 retirees have overtime payments since 2017
+
+retiree_test <- master_payroll %>% 
+  left_join(police_retirees, by = "full_name")
+
+retiree_test <- retiree_test %>% 
+  rename("retired" = n) %>% 
+  mutate(retired = if_else(is.na(retired), "N", "Y"))
+
+retiree_test %>% 
+  filter(retired == "Y") %>% 
+  count(full_name)
+
+#TO BE CONTINUED...
+```
+
