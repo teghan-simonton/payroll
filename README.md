@@ -3,7 +3,7 @@ Payroll analysis for City of Columbia, Missouri
 
 Columbia makes checkbook data available for download online: https://como.payroll.socrata.com/#!/year/All%20Years/full_time_employees,others/pay1,pay2,pay3,pay4/explore/1-0/segment2
 
-Due to a glitch in the website, I had to download each year of data separately. For this analysis, I'm using fiscal years 2017-2023.
+Due to a glitch in the website, I had to download each year of data separately. Unfortunately, even separating each year, the files are two large to upload here; but they can be downloaded from the link above. For this analysis, I'm using fiscal years 2017-2023.
 
 Each row of data represents a payroll transaction for a city employee -- including individual charges (base pay, overtime, social security, etc.) It allows us to see how much of each element makes up an individual's paycheck. 
 
